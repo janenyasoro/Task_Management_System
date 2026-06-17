@@ -4,16 +4,43 @@
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 
+# Import validation functions
+from task_manager.validation import (
+    validate_task_title,
+    validate_task_description,
+    validate_due_date,
+    validate_priority,
+    validate_task_number,
+    validate_progress
+)
+
 
 def create_progress_bar(percentage: int, width: int = 20) -> str:
-    """Create a visual progress bar."""
+    """
+    Create a visual progress bar.
+    
+    Args:
+        percentage: Progress percentage (0-100)
+        width: Width of the progress bar in characters
+    
+    Returns:
+        String representation of a progress bar
+    """
     filled = int(width * percentage / 100)
     empty = width - filled
     return "█" * filled + "░" * empty
 
 
 def get_priority_icon(priority: str) -> str:
-    """Get emoji icon for priority level."""
+    """
+    Get emoji icon for priority level.
+    
+    Args:
+        priority: Priority level (High, Medium, Low)
+    
+    Returns:
+        Emoji string
+    """
     icons = {
         "High": "🔴",
         "Medium": "🟡",
@@ -24,31 +51,47 @@ def get_priority_icon(priority: str) -> str:
 
 def add_task(tasks: List[Dict], title: str, description: str = "", 
              due_date: str = "", priority: str = "Medium") -> Tuple[List[Dict], bool, str]:
-    """Add a new task."""
-    # Validate and clean title
-    if not title or title.strip() == "":
-        title = "Untitled Task"
-    else:
-        title = title.strip()
+    """
+    Add a new task to the task list.
     
-    # Normalize priority
-    priority_map = {
-        "H": "High", "HIGH": "High", "1": "High",
-        "M": "Medium", "MEDIUM": "Medium", "2": "Medium",
-        "L": "Low", "LOW": "Low", "3": "Low"
-    }
-    priority = priority_map.get(priority.upper(), "Medium")
+    Args:
+        tasks: List of task dictionaries
+        title: Task title (required)
+        description: Task description (optional)
+        due_date: Due date (optional)
+        priority: Priority level (High, Medium, Low)
+    
+    Returns:
+        Tuple of (updated_tasks, success, message)
+    """
+    # Validate title
+    if not title or title.strip() == "":
+        return tasks, False, "❌ Task title cannot be empty!"
+    
+    title = title.strip()
+    
+    # Validate description (optional)
+    if description:
+        description = description.strip()
+    
+    # Validate priority
+    is_valid, validated_priority, _ = validate_priority(priority)
+    if not is_valid:
+        validated_priority = "Medium"
     
     # Generate new ID
-    new_id = max([task.get("id", 0) for task in tasks], default=0) + 1
+    if tasks:
+        new_id = max(task.get("id", 0) for task in tasks) + 1
+    else:
+        new_id = 1
     
-    # Create task
+    # Create task dictionary
     task = {
         "id": new_id,
         "title": title,
-        "description": description.strip() if description else "",
+        "description": description if description else "",
         "due_date": due_date if due_date else "No due date",
-        "priority": priority,
+        "priority": validated_priority,
         "completed": False,
         "progress": 0,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -59,33 +102,56 @@ def add_task(tasks: List[Dict], title: str, description: str = "",
     return tasks, True, f"✅ Task '{title}' added successfully! (ID: {new_id})"
 
 
-def mark_task_as_complete(tasks: List[Dict], task_num: str) -> Tuple[List[Dict], bool, str]:
-    """Mark a task as complete."""
+def mark_task_as_complete(tasks: List[Dict], task_identifier: str) -> Tuple[List[Dict], bool, str]:
+    """
+    Mark a task as complete (100% progress).
+    
+    Args:
+        tasks: List of task dictionaries
+        task_identifier: Task number (1-based as shown to user)
+    
+    Returns:
+        Tuple of (updated_tasks, success, message)
+    """
     if not tasks:
         return tasks, False, "❌ No tasks available!"
     
-    try:
-        index = int(task_num) - 1
-        if 0 <= index < len(tasks):
-            if tasks[index]["completed"]:
-                return tasks, False, f"⚠️ Task '{tasks[index]['title']}' is already complete!"
-            
-            tasks[index]["completed"] = True
-            tasks[index]["progress"] = 100
-            tasks[index]["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            return tasks, True, f"✅ Task '{tasks[index]['title']}' marked as complete!"
-        else:
-            return tasks, False, "❌ Invalid task number!"
-    except (ValueError, TypeError):
-        return tasks, False, "❌ Please enter a valid number!"
+    # Validate task number
+    is_valid, task_index, message = validate_task_number(task_identifier, len(tasks))
+    
+    if not is_valid:
+        return tasks, False, message
+    
+    # Check if task is already complete
+    if tasks[task_index]["completed"]:
+        return tasks, False, f"⚠️ Task '{tasks[task_index]['title']}' is already complete!"
+    
+    # Mark task as complete
+    tasks[task_index]["completed"] = True
+    tasks[task_index]["progress"] = 100
+    tasks[task_index]["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    return tasks, True, f"✅ Task '{tasks[task_index]['title']}' marked as complete! Great job!"
 
 
 def view_pending_tasks(tasks: List[Dict]) -> List[Dict]:
-    """Display pending tasks."""
+    """
+    Display all pending (incomplete) tasks.
+    
+    Args:
+        tasks: List of task dictionaries
+    
+    Returns:
+        List of pending tasks
+    """
     pending = [task for task in tasks if not task["completed"]]
     
     if not pending:
-        print("\n🎉 NO PENDING TASKS! All tasks are complete!")
+        print("\n" + "=" * 60)
+        print("🎉 NO PENDING TASKS!")
+        print("=" * 60)
+        print("All tasks are complete! You're doing great! 🎯")
+        print("=" * 60)
         return pending
     
     print("\n" + "=" * 60)
@@ -96,10 +162,10 @@ def view_pending_tasks(tasks: List[Dict]) -> List[Dict]:
         progress_bar = create_progress_bar(task["progress"])
         priority_icon = get_priority_icon(task["priority"])
         
-        print(f"\n{i}. {priority_icon} [{task['id']}] {task['title']}")
+        print(f"\n{i}. {priority_icon} [{task['id']}] {task['title'].upper()}")
         if task["description"]:
-            print(f"   📝 {task['description'][:80]}")
-        print(f"   📊 {progress_bar} {task['progress']}%")
+            print(f"   📝 Description: {task['description'][:80]}")
+        print(f"   📊 Progress: {progress_bar} {task['progress']}%")
         print(f"   📅 Due: {task['due_date']}")
         print(f"   🏷️  Priority: {task['priority']}")
     
@@ -108,24 +174,36 @@ def view_pending_tasks(tasks: List[Dict]) -> List[Dict]:
 
 
 def view_all_tasks(tasks: List[Dict]) -> None:
-    """Display all tasks."""
+    """
+    Display all tasks (both complete and incomplete).
+    
+    Args:
+        tasks: List of task dictionaries
+    """
     if not tasks:
-        print("\n📭 No tasks found!")
+        print("\n📭 No tasks found. Add some tasks first!")
         return
     
     print("\n" + "=" * 60)
     print(f"📋 ALL TASKS ({len(tasks)} total)")
     print("=" * 60)
     
-    for i, task in enumerate(tasks, 1):
+    # Sort tasks: pending first, then by priority
+    def sort_key(task):
+        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        return (task["completed"], priority_order[task["priority"]])
+    
+    sorted_tasks = sorted(tasks, key=sort_key)
+    
+    for i, task in enumerate(sorted_tasks, 1):
         status = "✅" if task["completed"] else "⏳"
         priority_icon = get_priority_icon(task["priority"])
         progress_bar = create_progress_bar(task["progress"])
         
-        print(f"\n{i}. {status} {priority_icon} [{task['id']}] {task['title']}")
+        print(f"\n{i}. {status} {priority_icon} [{task['id']}] {task['title'].upper()}")
         if task["description"]:
-            print(f"   📝 {task['description'][:80]}")
-        print(f"   📊 {progress_bar} {task['progress']}%")
+            print(f"   📝 Description: {task['description'][:80]}")
+        print(f"   📊 Progress: {progress_bar} {task['progress']}%")
         print(f"   📅 Due: {task['due_date']}")
         print(f"   🏷️  Priority: {task['priority']}")
         
@@ -135,36 +213,58 @@ def view_all_tasks(tasks: List[Dict]) -> None:
     print("\n" + "=" * 60)
 
 
-def update_task_progress(tasks: List[Dict], task_num: str, progress: int) -> Tuple[List[Dict], bool, str]:
-    """Update task progress."""
+def update_task_progress(tasks: List[Dict], task_identifier: str, progress: int) -> Tuple[List[Dict], bool, str]:
+    """
+    Update the progress percentage of a task.
+    
+    Args:
+        tasks: List of task dictionaries
+        task_identifier: Task number (1-based as shown to user)
+        progress: Progress percentage (0-100)
+    
+    Returns:
+        Tuple of (updated_tasks, success, message)
+    """
     if not tasks:
         return tasks, False, "❌ No tasks available!"
     
-    try:
-        index = int(task_num) - 1
-        if 0 <= index < len(tasks):
-            if 0 <= progress <= 100:
-                tasks[index]["progress"] = progress
-                if progress == 100:
-                    tasks[index]["completed"] = True
-                    tasks[index]["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    return tasks, True, f"🎉 Task '{tasks[index]['title']}' completed! (100%)"
-                else:
-                    tasks[index]["completed"] = False
-                    tasks[index]["completed_at"] = None
-                    return tasks, True, f"📈 Task '{tasks[index]['title']}' progress updated to {progress}%"
-            else:
-                return tasks, False, "❌ Progress must be between 0 and 100!"
-        else:
-            return tasks, False, "❌ Invalid task number!"
-    except (ValueError, TypeError):
-        return tasks, False, "❌ Please enter valid numbers!"
+    # Validate task number
+    is_valid, task_index, message = validate_task_number(task_identifier, len(tasks))
+    
+    if not is_valid:
+        return tasks, False, message
+    
+    # Validate progress
+    is_valid, progress_value, message = validate_progress(str(progress))
+    
+    if not is_valid:
+        return tasks, False, message
+    
+    # Update progress
+    tasks[task_index]["progress"] = progress_value
+    
+    if progress_value == 100:
+        tasks[task_index]["completed"] = True
+        tasks[task_index]["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return tasks, True, f"🎉 Task '{tasks[task_index]['title']}' completed! (100%)"
+    else:
+        tasks[task_index]["completed"] = False
+        tasks[task_index]["completed_at"] = None
+        return tasks, True, f"📈 Task '{tasks[task_index]['title']}' progress updated to {progress_value}%"
 
 
 def calculate_progress(tasks: List[Dict]) -> Dict:
-    """Calculate progress statistics."""
+    """
+    Calculate and display overall progress statistics.
+    
+    Args:
+        tasks: List of task dictionaries
+    
+    Returns:
+        Dictionary containing progress statistics
+    """
     if not tasks:
-        print("\n📭 No tasks to track!")
+        print("\n📭 No tasks to track. Add some tasks first!")
         return {
             "total_tasks": 0,
             "completed_tasks": 0,
@@ -176,21 +276,12 @@ def calculate_progress(tasks: List[Dict]) -> Dict:
     completed_tasks = sum(1 for task in tasks if task["completed"])
     total_progress = sum(task["progress"] for task in tasks) / total_tasks
     
-    print("\n" + "=" * 60)
-    print("📊 PROGRESS REPORT")
-    print("=" * 60)
-    print(f"\n📌 Total Tasks: {total_tasks}")
-    print(f"✅ Completed: {completed_tasks} ({completed_tasks/total_tasks*100:.1f}%)")
-    print(f"⏳ Pending: {total_tasks - completed_tasks}")
-    print(f"📈 Overall Progress: {total_progress:.1f}%")
-    
-    progress_bar = create_progress_bar(int(total_progress), 40)
-    print(f"   {progress_bar}")
-    
     # Priority breakdown
-    priority_stats = {"High": {"total": 0, "completed": 0},
-                     "Medium": {"total": 0, "completed": 0},
-                     "Low": {"total": 0, "completed": 0}}
+    priority_stats = {
+        "High": {"total": 0, "completed": 0},
+        "Medium": {"total": 0, "completed": 0},
+        "Low": {"total": 0, "completed": 0}
+    }
     
     for task in tasks:
         priority = task["priority"]
@@ -198,34 +289,88 @@ def calculate_progress(tasks: List[Dict]) -> Dict:
         if task["completed"]:
             priority_stats[priority]["completed"] += 1
     
-    print(f"\n🎯 By Priority:")
+    # Count overdue tasks
+    overdue_tasks = 0
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    for task in tasks:
+        if not task["completed"] and task["due_date"] != "No due date":
+            try:
+                due = datetime.strptime(task["due_date"], "%Y-%m-%d")
+                if due < today:
+                    overdue_tasks += 1
+            except:
+                pass
+    
+    # Display report
+    print("\n" + "=" * 60)
+    print("📊 PROGRESS REPORT")
+    print("=" * 60)
+    
+    print(f"\n📌 OVERALL STATISTICS:")
+    print(f"   • Total Tasks: {total_tasks}")
+    print(f"   • Completed: {completed_tasks} ({completed_tasks/total_tasks*100:.1f}%)")
+    print(f"   • Pending: {total_tasks - completed_tasks}")
+    print(f"   • Overdue: {overdue_tasks}")
+    
+    print(f"\n📈 OVERALL PROGRESS: {total_progress:.1f}%")
+    progress_bar = create_progress_bar(int(total_progress), width=40)
+    print(f"   {progress_bar}")
+    
+    print(f"\n⚠️ BREAKDOWN BY PRIORITY:")
     for priority, stats in priority_stats.items():
         if stats["total"] > 0:
             pct = (stats["completed"] / stats["total"]) * 100
             icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}[priority]
-            print(f"   {icon} {priority}: {stats['completed']}/{stats['total']} ({pct:.1f}%)")
+            print(f"   {icon} {priority}: {stats['completed']}/{stats['total']} completed ({pct:.1f}%)")
     
-    print("=" * 60)
+    # Recent completions (last 7 days)
+    recent_completions = 0
+    for task in tasks:
+        if task["completed"] and task["completed_at"]:
+            try:
+                completed_date = datetime.strptime(task["completed_at"], "%Y-%m-%d %H:%M:%S")
+                days_ago = (datetime.now() - completed_date).days
+                if days_ago <= 7:
+                    recent_completions += 1
+            except:
+                pass
+    
+    if recent_completions > 0:
+        print(f"\n🏆 RECENT ACHIEVEMENTS:")
+        print(f"   • Completed {recent_completions} task(s) in the last 7 days!")
+    
+    print("\n" + "=" * 60)
     
     return {
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
         "pending_tasks": total_tasks - completed_tasks,
-        "overall_progress": total_progress
+        "overall_progress": total_progress,
+        "overdue_tasks": overdue_tasks,
+        "recent_completions": recent_completions
     }
 
 
-def remove_task(tasks: List[Dict], task_num: str) -> Tuple[List[Dict], bool, str]:
-    """Remove a task."""
-    if not tasks:
-        return tasks, False, "❌ No tasks available!"
+def remove_task(tasks: List[Dict], task_identifier: str) -> Tuple[List[Dict], bool, str]:
+    """
+    Remove a task from the list.
     
-    try:
-        index = int(task_num) - 1
-        if 0 <= index < len(tasks):
-            removed = tasks.pop(index)
-            return tasks, True, f"🗑️ Task '{removed['title']}' removed!"
-        else:
-            return tasks, False, "❌ Invalid task number!"
-    except (ValueError, TypeError):
-        return tasks, False, "❌ Please enter a valid number!"
+    Args:
+        tasks: List of task dictionaries
+        task_identifier: Task number (1-based as shown to user)
+    
+    Returns:
+        Tuple of (updated_tasks, success, message)
+    """
+    if not tasks:
+        return tasks, False, "❌ No tasks available to remove!"
+    
+    # Validate task number
+    is_valid, task_index, message = validate_task_number(task_identifier, len(tasks))
+    
+    if not is_valid:
+        return tasks, False, message
+    
+    removed_task = tasks.pop(task_index)
+    return tasks, True, f"🗑️ Task '{removed_task['title']}' removed successfully!"
