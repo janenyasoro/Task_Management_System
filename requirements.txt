@@ -1,0 +1,1 @@
+# Task Management System - No external dependencies

@@ -58,13 +58,6 @@ def validate_task_description(description: str) -> Tuple[bool, str]:
     if len(cleaned_description) > 500:
         return False, "Task description is too long! Maximum 500 characters."
     
-    # Check for proper formatting (no excessive special characters)
-    special_char_count = sum(1 for char in cleaned_description if not char.isalnum() and not char.isspace())
-    total_chars = len(cleaned_description)
-    
-    if total_chars > 0 and special_char_count / total_chars > 0.5:
-        return False, "Description contains too many special characters!"
-    
     return True, cleaned_description
 
 
@@ -92,9 +85,6 @@ def validate_due_date(due_date: str) -> Tuple[bool, str, Optional[str]]:
         "%Y/%m/%d",  # 2024/12/25
         "%d-%m-%Y",  # 25-12-2024
         "%m-%d-%Y",  # 12-25-2024
-        "%d.%m.%Y",  # 25.12.2024
-        "%b %d, %Y", # Dec 25, 2024
-        "%B %d, %Y"  # December 25, 2024
     ]
     
     for date_format in date_formats:
@@ -164,7 +154,7 @@ def validate_task_number(task_number: str, total_tasks: int) -> Tuple[bool, Opti
     try:
         task_num = int(task_number)
         if 1 <= task_num <= total_tasks:
-            return True, task_num - 1, "Valid"  # Return 0-based index
+            return True, task_num - 1, "Valid"
         else:
             return False, None, f"Invalid task number! Please enter a number between 1 and {total_tasks}"
     except (ValueError, TypeError):
@@ -234,55 +224,3 @@ def validate_yes_no(prompt: str) -> bool:
             return False
         else:
             print("❌ Please enter 'y' or 'n'")
-
-
-def validate_email(email: str) -> Tuple[bool, str]:
-    """
-    Validate email format (useful for user accounts).
-    
-    Args:
-        email: Email string to validate
-    
-    Returns:
-        Tuple of (is_valid, message_or_cleaned_email)
-    """
-    if not email or email.strip() == "":
-        return False, "Email cannot be empty!"
-    
-    email = email.strip()
-    
-    # Basic email regex pattern
-    import re
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    
-    if re.match(pattern, email):
-        return True, email
-    else:
-        return False, "Invalid email format!"
-
-
-def validate_date_range(start_date: str, end_date: str) -> Tuple[bool, str]:
-    """
-    Validate that end date is after start date.
-    
-    Args:
-        start_date: Start date string
-        end_date: End date string
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    is_valid_start, _, start_standardized = validate_due_date(start_date)
-    is_valid_end, _, end_standardized = validate_due_date(end_date)
-    
-    if not is_valid_start:
-        return False, "Invalid start date format!"
-    
-    if not is_valid_end:
-        return False, "Invalid end date format!"
-    
-    if start_standardized and end_standardized:
-        if start_standardized > end_standardized:
-            return False, "End date must be after start date!"
-    
-    return True, "Valid"    
